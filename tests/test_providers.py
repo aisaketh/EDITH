@@ -6,6 +6,7 @@ import unittest
 from contextlib import contextmanager
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs
 
 from edith.broker.egress import EgressConfig, EgressGuard
 from edith.broker.gateway import LLMGateway, ProviderError, RateLimited, Status
@@ -23,9 +24,13 @@ def serve(responder):
     seen = []
 
     class Handler(BaseHTTPRequestHandler):
-        def do_POST(self):
+        def _handle(self):
             raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            seen.append((self.path, dict(self.headers), json.loads(raw or b"{}")))
+            try:
+                parsed = json.loads(raw or b"{}")
+            except ValueError:  # form-encoded bodies (OAuth token endpoint)
+                parsed = {k: v[0] for k, v in parse_qs(raw.decode("utf-8", "replace")).items()}
+            seen.append((self.path, dict(self.headers), parsed))
             status, body, headers = responder(self.path, self.headers, raw)
             self.send_response(status)
             for k, v in headers.items():
@@ -33,6 +38,9 @@ def serve(responder):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        do_GET = _handle
+        do_POST = _handle
 
         def log_message(self, *args):
             pass

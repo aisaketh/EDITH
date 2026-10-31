@@ -29,6 +29,44 @@ MIGRATIONS = [
     );
     CREATE INDEX idx_reminders_due ON reminders(status, due_utc);
     """,
+    # v2: memory (facts with provenance), goals and tasks
+    """
+    CREATE TABLE facts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        sensitivity INTEGER NOT NULL,
+        source TEXT NOT NULL,                      -- provenance, e.g. 'user_command'
+        status TEXT NOT NULL DEFAULT 'confirmed',  -- confirmed | candidate
+        created_utc TEXT NOT NULL,
+        last_confirmed_utc TEXT
+    );
+    CREATE TABLE goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        target_utc TEXT,
+        status TEXT NOT NULL DEFAULT 'active',     -- active | done | abandoned
+        created_utc TEXT NOT NULL
+    );
+    CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id INTEGER REFERENCES goals(id),
+        title TEXT NOT NULL,
+        due_utc TEXT,
+        status TEXT NOT NULL DEFAULT 'open',       -- open | done
+        created_utc TEXT NOT NULL,
+        done_utc TEXT
+    );
+    CREATE INDEX idx_tasks_status ON tasks(status, due_utc);
+    """,
+    # v3: persistent usage counters for free-tier budgets (survive restarts)
+    """
+    CREATE TABLE usage (
+        period TEXT NOT NULL,          -- '2026-11-02' (day) or '2026-11' (month)
+        key TEXT NOT NULL,
+        n INTEGER NOT NULL,
+        PRIMARY KEY (period, key)
+    );
+    """,
 ]
 
 

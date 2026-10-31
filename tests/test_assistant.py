@@ -153,6 +153,12 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(a.handle(CHAT, "/cancel 2"), "Cancelled.")
         self.assertEqual(llm.calls, [])  # commands never touch a model
 
+    def test_show_command(self):
+        _, _, _, a = build()
+        a.handle(CHAT, "/remind 2026-11-03 09:00 buy milk")
+        self.assertIn("buy milk", a.handle(CHAT, "/show 1"))
+        self.assertIn("No reminder", a.handle(CHAT, "/show 99"))
+
     def test_deadline_command(self):
         _, store, _, a = build()
         self.assertIn("4 reminders", a.handle(CHAT, "/deadline 2026-11-05 17:00 Submit report"))
@@ -171,6 +177,78 @@ class CommandTests(unittest.TestCase):
     def test_commands_with_bot_suffix(self):
         _, _, _, a = build()
         self.assertEqual(a.handle(CHAT, "/list@edith_bot"), "Nothing pending.")
+
+
+def build_full():
+    from edith.goals.tracker import GoalStore
+    from edith.memory.facts import FactStore
+    clock = Clock()
+    conn = connect()
+    store = ReminderStore(conn, IST, clock)
+    facts = FactStore(conn, clock)
+    return store, facts, Assistant(store, FakeLLM(), facts, GoalStore(conn, IST, clock))
+
+
+class MemoryCommandTests(unittest.TestCase):
+    def test_remember_facts_forget(self):
+        _, _, a = build_full()
+        self.assertEqual(a.handle(CHAT, "/remember I am vegetarian"), "Remembered (#1).")
+        self.assertEqual(a.handle(CHAT, "/remember  i am   vegetarian"), "Remembered (#1).")  # no duplicate
+        self.assertIn("#1 I am vegetarian", a.handle(CHAT, "/facts"))
+        self.assertEqual(a.handle(CHAT, "/forget 1"), "Forgotten.")
+        self.assertIn("don't know anything", a.handle(CHAT, "/facts"))
+
+    def test_bad_input(self):
+        _, _, a = build_full()
+        self.assertIn("secret", a.handle(CHAT, "/remember my OTP is 482913"))
+        self.assertIn("Usage: /remember", a.handle(CHAT, "/remember"))
+        self.assertIn("No such fact", a.handle(CHAT, "/forget 99"))
+        self.assertEqual(a.handle(CHAT, "/forget banana"), "Usage: /forget N")
+
+    def test_candidates_need_confirmation(self):
+        _, facts, a = build_full()
+        facts.add("likes spicy food", "inferred", status="candidate")
+        self.assertIn("(unconfirmed) #1", a.handle(CHAT, "/facts"))
+        self.assertEqual(a.handle(CHAT, "/confirm 1"), "Confirmed.")
+        self.assertNotIn("unconfirmed", a.handle(CHAT, "/facts"))
+
+    def test_disabled_features_say_so(self):
+        _, _, _, a = build()
+        self.assertEqual(a.handle(CHAT, "/remember x"), "Memory is not enabled.")
+        self.assertEqual(a.handle(CHAT, "/goal x"), "Goal tracking is not enabled.")
+
+
+class GoalCommandTests(unittest.TestCase):
+    def test_goal_task_flow(self):
+        _, _, a = build_full()
+        self.assertIn("G1 saved", a.handle(CHAT, "/goal Learn guitar by 2026-11-30"))
+        self.assertEqual(a.handle(CHAT, "/task goal 1 buy strings by 2026-11-05"), "Task T1 saved.")
+        self.assertEqual(a.handle(CHAT, "/task practice chords"), "Task T2 saved.")
+        tasks = a.handle(CHAT, "/tasks")
+        self.assertIn("T1 [G1] buy strings (due Thu 05 Nov 2026", tasks)
+        self.assertIn("T2 practice chords", tasks)
+        self.assertEqual(a.handle(CHAT, "/task done 1"), "Task done.")
+        self.assertIn("No open task #1", a.handle(CHAT, "/task done 1"))
+        self.assertIn("G1 Learn guitar: 1/1 (100%)", a.handle(CHAT, "/goals"))
+        self.assertIn("Review - Mon 02 Nov", a.handle(CHAT, "/review"))
+        self.assertEqual(a.handle(CHAT, "/closegoal 1"), "Goal closed.")
+        self.assertIn("No active goals", a.handle(CHAT, "/goals"))
+
+    def test_errors(self):
+        _, _, a = build_full()
+        self.assertIn("Usage: /goal", a.handle(CHAT, "/goal"))
+        self.assertIn("bad_date", a.handle(CHAT, "/goal x by 2026-13-45"))
+        self.assertIn("passed", a.handle(CHAT, "/goal x by 2020-01-01"))
+        self.assertIn("No such active goal", a.handle(CHAT, "/task goal 99 x"))
+        self.assertIn("secret", a.handle(CHAT, "/goal my OTP is 482913"))
+        self.assertIn("Usage: /closegoal", a.handle(CHAT, "/closegoal"))
+
+    def test_weekly_review_is_a_recurring_reminder(self):
+        store, _, a = build_full()
+        self.assertIn("scheduled", a.handle(CHAT, "/review weekly"))
+        (r,) = store.list_pending()
+        self.assertEqual(r.due.astimezone(IST), ist(2026, 11, 8, 18, 0))   # the coming Sunday
+        self.assertEqual(r.recurrence, {"freq": "weekly", "every": 1, "weekdays": [6]})
 
 
 if __name__ == "__main__":

@@ -68,12 +68,15 @@ class Escalation:
 class LLMGateway:
     def __init__(self, guard: EgressGuard, providers: List[Provider],
                  daily_limits: Optional[Dict[str, int]] = None,
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time, counter=None):
+        """`counter` (store.usage.UsageCounter) makes the daily budgets survive restarts;
+        without it they are counted in memory only."""
         self.guard = guard
         self.providers = list(providers)
         self.daily_limits = dict(daily_limits or {})
         self._clock = clock
         self._used: Dict[Tuple[str, str], int] = {}
+        self._counter = counter
 
     # --- free-tier budget -------------------------------------------------
     def _day(self) -> str:
@@ -81,9 +84,16 @@ class LLMGateway:
 
     def _budget_ok(self, p: Provider) -> bool:
         limit = self.daily_limits.get(p.name)
-        return limit is None or self._used.get((p.name, self._day()), 0) < limit
+        if limit is None:
+            return True
+        if self._counter is not None:
+            return self._counter.used(f"llm:{p.name}", "day") < limit
+        return self._used.get((p.name, self._day()), 0) < limit
 
     def _bump(self, p: Provider) -> None:
+        if self._counter is not None:
+            self._counter.try_use(f"llm:{p.name}", 10 ** 9, "day")
+            return
         key = (p.name, self._day())
         self._used[key] = self._used.get(key, 0) + 1
 

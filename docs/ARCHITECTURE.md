@@ -362,4 +362,35 @@ Rules:
 - Payments: final gate is the user's UPI PIN on their own phone. The agent never holds payment credentials.
 - Not adopted: cloud per-user VMs (cost, privacy), many parallel subagents (free-tier rate limits).
 
-This replaces the single "Policy Engine" box in section 3 with the broker described here; Phase 0 builds the split from the start because retrofitting it is hard.
+This replaces the single "Policy Engine" box in section 3 with the broker described here. (Status: the code is organised along this line, `edith/broker/` vs `edith/agent/`, but it still runs as ONE process. The OS-level split is not done. See section 13.)
+
+---
+
+## 13. Implementation status (kept current)
+
+Chronological log, verification levels, known issues and the prioritised backlog live in [BUILDLOG.md](BUILDLOG.md).
+
+Last updated alongside the web search / fact-check / places work (after Gmail, memory, goals, evals). "Tested" means unit tests against fakes. Nothing has yet been run against a real model, a real Telegram bot, or real Gmail.
+
+| Area | Status | Code | Notes |
+|---|---|---|---|
+| Data classes, classifier, redactor | Built, tested | `edith/privacy/` | Pattern-based; person names only via supplied contact names |
+| Egress guard, ledger, policy tiers, kill switch | Built, tested | `edith/broker/` | Hash-chained local ledger; halted state blocks all egress except the owner chat |
+| LLM gateway (fallback, daily budgets, approval-bound escalation) | Built, tested | `edith/broker/gateway.py` | |
+| Ollama + Gemini providers | Built, tested vs fake HTTP servers | `edith/providers/` | Real models not yet exercised (needs the personal Mac) |
+| Reminders, recurrence, nags, deadlines, scheduler | Built, tested | `edith/scheduler/` | At-least-once delivery with backoff |
+| NL parsing (English / Telugu / romanised) + confirm-before-save | Built, tested | `edith/agent/` | Telugu UI strings need native review; real-model accuracy unmeasured |
+| Telegram channel, owner lock, pairing, app runner | Built, tested vs fakes | `edith/channels/`, `edith/app.py` | Never run against the real Telegram API |
+| Memory v1 (facts, provenance, candidates, forget) | Built, tested | `edith/memory/` | Keyword retrieval. `context_block()` exists but is not yet fed into prompts |
+| Goals, tasks, progress, review, weekly review reminder | Built, tested | `edith/goals/` | Progress is computed from task state, never by a model |
+| Evaluation harness | Built, tested | `edith/evals/` | `python3 -m edith.evals` (replay) and `--live` (real model, fake data) |
+| Gmail: read-only client, Google OAuth (loopback + PKCE), triage, `/mail` digest, `/mailadd` | Built, tested vs fake Google servers | `edith/connectors/`, `edith/agent/mail.py`, `edith/agent/email_triage.py` | Never run against real Google. Triage runs on the LOCAL model only (email is S2); secret-bearing mail never reaches any model; the digest is shown in Telegram only after you approve that exact text. Per-item "escalate to cloud" for email is NOT built (design in 11.x remains) |
+| Web search (Tavily), fact-checking, Places suggestions, persistent free-tier budgets | Built, tested vs fake servers | `edith/connectors/search.py`, `places.py`, `edith/agent/factcheck.py`, `edith/store/usage.py` | Never run against the real services; request shapes follow the vendors' docs as I know them, verify with real keys. Only typed query text leaves the machine (personal details refused, secrets denied). Fact-check verdicts need quotes verified word-for-word against the sources, otherwise they are downgraded to "insufficient". Place ranking uses your saved preferences locally; they are never sent. LLM daily budgets now persist across restarts |
+| Planner / executor / verifier | Not started | | |
+| Agent/broker OS-level process split | Not started | | Single process today |
+| Android helper, WhatsApp route, food ordering | Not started | | Need device and accounts |
+| Voice, suggestion budget, embeddings | Not started | | |
+
+Phase mapping: Phase 0 is mostly done except the process split. Phase 1 is functionally complete; its exit criterion (two weeks of real daily use with no missed or wrong reminders) has NOT been met. The next real milestone is running it on the personal Mac and measuring with `--live`.
+
+Deviations from the plan above: Python 3.9 standard library only (no FastAPI/Postgres yet); SQLite instead of Postgres; keyword memory retrieval instead of pgvector; single process instead of two.
