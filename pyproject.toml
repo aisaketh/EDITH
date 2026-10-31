@@ -1,0 +1,9 @@
+[project]
+name = "edith"
+version = "0.0.1"
+description = "Privacy-first personal assistant"
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["edith*"]
