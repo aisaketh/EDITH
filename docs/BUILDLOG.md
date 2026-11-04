@@ -19,14 +19,14 @@ Verification levels used below:
 | 2 | LLM gateway (ordered fallback, daily budgets, approval-bound escalation) | 79c51c6 | V1 | +9 |
 | 3 | Ollama + Gemini providers, hardened HTTP helper (no redirects, no secrets in errors) | 79c51c6 | V1 | +11 |
 | 4 | Reminder scheduler, recurrence, nags, deadlines; NL parser (EN/TE) with confirm-before-save; assistant | 79c51c6 | V1 | 97 total |
-| 5 | Telegram channel, owner lock + pairing, kill switch, config, app runner, notifier | uncommitted | **V0** | ~28 |
-| 6 | Memory (facts with provenance/candidates), goals/tasks/progress/review, eval harness (25 cases) | uncommitted | **V0** | ~45 |
-| 7 | Read-only Gmail: OAuth (loopback + PKCE), client, local-only triage, `/mail`, `/mailadd` | uncommitted | **V0** | ~60 |
-| 8 | Web: Tavily search, Google Fact Check, fact-check pipeline with quote verification, Places + local ranking, persistent budgets | uncommitted | **V0** | ~60 |
-| 9 | Static-review fixes (this round): secrets in email subjects no longer block the whole digest; stray loopback requests no longer abort OAuth login | uncommitted | **V0** | +2 |
+| 5 | Telegram channel, owner lock + pairing, kill switch, config, app runner, notifier | next commit | V1 | |
+| 6 | Memory (facts with provenance/candidates), goals/tasks/progress/review, eval harness (25 cases) | next commit | V1 | |
+| 7 | Read-only Gmail: OAuth (loopback + PKCE), client, local-only triage, `/mail`, `/mailadd` | next commit | V1 | |
+| 8 | Web: Tavily search, Google Fact Check, fact-check pipeline with quote verification, Places + local ranking, persistent budgets | next commit | V1 | |
+| 9 | Static-review fixes: secrets in email subjects no longer block the whole digest; stray loopback requests no longer abort OAuth login | next commit | V1 | **255 total** |
 
-**Why increments 5–9 are V0:** the shell tool in the development session was unavailable from increment 5 onward,
-so tests were written and traced by hand but never executed. Running the suite is the first item in the backlog.
+Increments 5–9 were written while the development shell was unavailable, then executed together for the first
+time: **255 tests, all passing on the first run (2.5 s)**.
 
 ---
 
@@ -34,7 +34,6 @@ so tests were written and traced by hand but never executed. Running the suite i
 
 | ID | Severity | Issue | Plan |
 |---|---|---|---|
-| K1 | **High** | ~190 tests (increments 5–9) never executed | Run suite; fix failures before anything else (B1) |
 | K2 | High | No V2 for any external integration (Telegram, Ollama, Gemini, Gmail, Tavily, Fact Check, Places). Request shapes follow vendor docs from memory | B2 on the personal Mac |
 | K3 | Medium | Single process: the agent and the broker share memory, so the credential-isolation claim in ARCHITECTURE §12 is aspirational | B6 |
 | K4 | Medium | Telugu UI strings are unreviewed machine-written Telugu | Native-speaker review |
@@ -53,7 +52,7 @@ Each item has an acceptance criterion; an item is done only when that criterion 
 
 | ID | Item | Acceptance criterion | Depends on |
 |---|---|---|---|
-| B1 | Run and green the full suite + `python3 -m edith.evals` | All tests pass; eval wrong-action rate 0; commit increments 5–9 | — |
+| B1 | Run and green the full suite + `python3 -m edith.evals` | Suite: done (255 pass). Remaining: eval replay shows wrong-action rate 0; commit increments 5–9 | — |
 | B2 | First real run on the personal Mac (Ollama + Telegram) | Pair the bot; 10 reminders set via NL in EN and TE, all correct; `--live` eval run recorded below | B1 |
 | B3 | V2 for Gmail, Tavily, Fact Check, Places with real keys | Each command returns sane output; fix any request-shape mismatch | B2 |
 | B4 | Phase 1 exit: two weeks of daily reminder use | Zero missed or wrong reminders, logged | B2 |
